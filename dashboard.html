@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zero-Trust Ecosystem — Live Dashboard</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #0a0c10;
+    --bg1: #111318;
+    --bg2: #171a20;
+    --bg3: #1e2128;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text: #e2e4ea;
+    --muted: #6b7280;
+    --dim: #9ca3af;
+    --green: #22d3a5;
+    --green-bg: rgba(34,211,165,0.08);
+    --red: #f87171;
+    --red-bg: rgba(248,113,113,0.08);
+    --amber: #fbbf24;
+    --amber-bg: rgba(251,191,36,0.08);
+    --blue: #60a5fa;
+    --blue-bg: rgba(96,165,250,0.08);
+    --purple: #a78bfa;
+    --teal: #2dd4bf;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 13px; min-height: 100vh; }
+
+  /* Layout */
+  .header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; }
+  .logo { font-family: var(--mono); font-size: 12px; letter-spacing: .12em; color: var(--green); font-weight: 500; }
+  .header-title { font-size: 14px; font-weight: 500; color: var(--text); }
+  .header-meta { margin-left: auto; display: flex; gap: 20px; align-items: center; }
+  .live-pill { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; color: var(--green); }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.2)} }
+  .clock { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+  .main { display: grid; grid-template-columns: 260px 1fr; height: calc(100vh - 53px); }
+
+  /* Sidebar */
+  .sidebar { border-right: 1px solid var(--border); padding: 16px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+
+  .section-label { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; }
+
+  /* Service status */
+  .svc-list { display: flex; flex-direction: column; gap: 4px; }
+  .svc-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; background: var(--bg2); border: 1px solid var(--border); }
+  .svc-indicator { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .svc-name { font-size: 12px; font-weight: 500; flex: 1; }
+  .svc-badge { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+  .online { background: var(--green); }
+  .degraded { background: var(--amber); }
+  .offline { background: var(--red); animation: pulse 1s infinite; }
+
+  /* Role traffic bars */
+  .role-traffic { display: flex; flex-direction: column; gap: 8px; }
+  .role-row { }
+  .role-header { display: flex; justify-content: space-between; margin-bottom: 3px; }
+  .role-name { font-size: 11px; font-weight: 500; }
+  .role-count { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .bar-track { height: 3px; background: var(--bg3); border-radius: 2px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 2px; transition: width .6s ease; }
+  .bar-green  { background: var(--green); }
+  .bar-purple { background: var(--purple); }
+  .bar-amber  { background: var(--amber); }
+  .bar-red    { background: var(--red); }
+
+  /* Main content */
+  .content { display: grid; grid-template-rows: auto 1fr; overflow: hidden; }
+  .metrics-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; border-bottom: 1px solid var(--border); background: var(--border); }
+  .metric-card { background: var(--bg1); padding: 14px 16px; }
+  .metric-label { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 6px; }
+  .metric-value { font-size: 26px; font-weight: 300; line-height: 1; }
+  .metric-sub { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-top: 4px; }
+  .metric-green { color: var(--green); }
+  .metric-red { color: var(--red); }
+  .metric-amber { color: var(--amber); }
+  .metric-blue { color: var(--blue); }
+  .metric-purple { color: var(--purple); }
+
+  /* Content grid */
+  .content-grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 1px; background: var(--border); overflow: hidden; }
+  .pane { background: var(--bg1); padding: 14px 16px; overflow: hidden; display: flex; flex-direction: column; }
+  .pane-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-shrink: 0; }
+  .pane-title { font-family: var(--mono); font-size: 11px; color: var(--dim); letter-spacing: .08em; }
+  .pane-count { font-family: var(--mono); font-size: 10px; padding: 1px 6px; border-radius: 3px; }
+  .count-green { background: var(--green-bg); color: var(--green); }
+  .count-red   { background: var(--red-bg); color: var(--red); }
+  .count-amber { background: var(--amber-bg); color: var(--amber); }
+  .count-blue  { background: var(--blue-bg); color: var(--blue); }
+
+  /* Access log */
+  #log-feed { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+  .log-line { font-family: var(--mono); font-size: 11px; padding: 4px 8px; border-radius: 3px; line-height: 1.5; display: flex; gap: 8px; align-items: baseline; flex-shrink: 0; }
+  .log-allow { background: rgba(34,211,165,0.04); border-left: 2px solid var(--green); }
+  .log-deny  { background: rgba(248,113,113,0.04); border-left: 2px solid var(--red); }
+  .log-warn  { background: rgba(251,191,36,0.04);  border-left: 2px solid var(--amber); }
+  .log-info  { background: var(--bg3); border-left: 2px solid var(--border2); }
+  .log-ts    { color: var(--muted); flex-shrink: 0; font-size: 10px; }
+  .log-role  { font-weight: 500; flex-shrink: 0; min-width: 68px; }
+  .log-body  { color: var(--dim); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tag-allow { color: var(--green); }
+  .tag-deny  { color: var(--red); }
+  .tag-warn  { color: var(--amber); }
+
+  /* AI anomaly feed */
+  #anomaly-feed { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .anomaly-card { padding: 8px 10px; border-radius: 5px; border: 1px solid var(--border); background: var(--bg2); flex-shrink: 0; }
+  .anomaly-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .anomaly-user { font-weight: 500; font-size: 12px; }
+  .risk-badge { font-family: var(--mono); font-size: 10px; padding: 2px 7px; border-radius: 3px; }
+  .risk-high   { background: var(--red-bg);   color: var(--red); }
+  .risk-med    { background: var(--amber-bg); color: var(--amber); }
+  .risk-low    { background: var(--green-bg); color: var(--green); }
+  .anomaly-flags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+  .flag { font-family: var(--mono); font-size: 10px; padding: 1px 6px; border-radius: 3px; background: var(--bg3); color: var(--muted); }
+
+  /* Policy panel */
+  #policy-list { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .policy-row { display: flex; align-items: center; padding: 7px 10px; border-radius: 5px; background: var(--bg2); border: 1px solid var(--border); gap: 10px; flex-shrink: 0; }
+  .policy-role { font-weight: 500; font-size: 11px; min-width: 72px; }
+  .policy-svc  { font-size: 11px; color: var(--dim); flex: 1; }
+  .policy-methods { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+  .policy-allow { border-left: 2px solid var(--green); }
+  .policy-deny  { border-left: 2px solid var(--red); }
+  .policy-live-tag { font-family: var(--mono); font-size: 10px; padding: 1px 5px; border-radius: 3px; }
+
+  /* Traffic chart */
+  #traffic-chart { width: 100%; flex: 1; }
+
+  /* Simulation controls */
+  .sim-bar { padding: 10px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; align-items: center; background: var(--bg); }
+  .sim-label { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-right: 4px; }
+  .sim-btn { padding: 5px 12px; border: 1px solid var(--border2); border-radius: 4px; background: var(--bg2); color: var(--dim); font-family: var(--mono); font-size: 11px; cursor: pointer; transition: all .15s; }
+  .sim-btn:hover { border-color: var(--border2); background: var(--bg3); color: var(--text); }
+  .sim-btn.active { border-color: var(--green); color: var(--green); background: var(--green-bg); }
+  .sim-btn.danger { border-color: var(--red); color: var(--red); background: var(--red-bg); }
+  .sim-btn.warn   { border-color: var(--amber); color: var(--amber); background: var(--amber-bg); }
+
+  /* Alert banner */
+  #alert-toast { position: fixed; top: 16px; right: 16px; padding: 10px 16px; background: var(--bg2); border: 1px solid var(--red); border-radius: 6px; color: var(--red); font-family: var(--mono); font-size: 12px; max-width: 360px; opacity: 0; transform: translateY(-8px); transition: all .3s; pointer-events: none; z-index: 99; }
+  #alert-toast.show { opacity: 1; transform: translateY(0); }
+
+  /* OPA decision badge */
+  .opa-tag { font-family: var(--mono); font-size: 10px; }
+</style>
+</head>
+<body>
+
+<div id="alert-toast">⚠ SECURITY ALERT</div>
+
+<header class="header">
+  <div class="logo">ZT-ECOSYSTEM</div>
+  <div class="header-title">Zero-Trust Monitoring Dashboard</div>
+  <div class="header-meta">
+    <div class="live-pill"><div class="live-dot"></div>LIVE</div>
+    <div class="clock" id="clock">00:00:00 UTC</div>
+  </div>
+</header>
+
+<div class="main">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div>
+      <div class="section-label">Services</div>
+      <div class="svc-list" id="svc-list">
+        <div class="svc-row"><div class="svc-indicator online"></div><div class="svc-name">API Gateway</div><div class="svc-badge">:8080</div></div>
+        <div class="svc-row"><div class="svc-indicator online"></div><div class="svc-name">Student Svc</div><div class="svc-badge">:3001</div></div>
+        <div class="svc-row"><div class="svc-indicator online"></div><div class="svc-name">Professor Svc</div><div class="svc-badge">:3002</div></div>
+        <div class="svc-row"><div class="svc-indicator online"></div><div class="svc-name">Visitor Svc</div><div class="svc-badge">:3003</div></div>
+        <div class="svc-row"><div class="svc-indicator online"></div><div class="svc-name">Admin Svc</div><div class="svc-badge">:3004</div></div>
+        <div class="svc-row"><div class="svc-indicator online"></div><div class="svc-name">OPA Engine</div><div class="svc-badge">:8181</div></div>
+        <div class="svc-row"><div class="svc-indicator online"></div><div class="svc-name">AI Engine</div><div class="svc-badge">:5000</div></div>
+        <div class="svc-row"><div class="svc-indicator online"></div><div class="svc-name">Elasticsearch</div><div class="svc-badge">:9201</div></div>
+        <div class="svc-row"><div class="svc-indicator online"></div><div class="svc-name">Prometheus</div><div class="svc-badge">:9090</div></div>
+        <div class="svc-row"><div class="svc-indicator online"></div><div class="svc-name">Redis</div><div class="svc-badge">:6379</div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">Role Traffic</div>
+      <div class="role-traffic">
+        <div class="role-row">
+          <div class="role-header"><span class="role-name" style="color:var(--green)">Student</span><span class="role-count" id="rc-student">0 req/min</span></div>
+          <div class="bar-track"><div class="bar-fill bar-green" id="rb-student" style="width:0%"></div></div>
+        </div>
+        <div class="role-row">
+          <div class="role-header"><span class="role-name" style="color:var(--purple)">Professor</span><span class="role-count" id="rc-professor">0 req/min</span></div>
+          <div class="bar-track"><div class="bar-fill bar-purple" id="rb-professor" style="width:0%"></div></div>
+        </div>
+        <div class="role-row">
+          <div class="role-header"><span class="role-name" style="color:var(--amber)">Visitor</span><span class="role-count" id="rc-visitor">0 req/min</span></div>
+          <div class="bar-track"><div class="bar-fill bar-amber" id="rb-visitor" style="width:0%"></div></div>
+        </div>
+        <div class="role-row">
+          <div class="role-header"><span class="role-name" style="color:var(--red)">Unknown/Bot</span><span class="role-count" id="rc-unknown">0 req/min</span></div>
+          <div class="bar-track"><div class="bar-fill bar-red" id="rb-unknown" style="width:0%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">OPA Policy</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.8;">
+        <div style="color:var(--green)">student → visitor ✓</div>
+        <div style="color:var(--green)">student → student ✓</div>
+        <div style="color:var(--red)">student → professor ✗</div>
+        <div style="color:var(--red)">student → admin ✗</div>
+        <div style="color:var(--green)">professor → all ✓</div>
+        <div style="color:var(--red)">professor → admin ✗</div>
+        <div style="color:var(--amber)">visitor → visitor ✓</div>
+        <div style="color:var(--red)">visitor → others ✗</div>
+        <div style="color:var(--blue)">admin → all ✓✓</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">mTLS Status</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.9;">
+        <div style="color:var(--green)">ISTIO STRICT MODE</div>
+        <div>cert rotation: 24h</div>
+        <div>cipher: TLS_AES_256_GCM</div>
+        <div>SPIFFE IDs: active</div>
+        <div id="cert-timer" style="color:var(--amber)">next rotation: 23:41:02</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="content">
+    <!-- Metric cards -->
+    <div class="metrics-row">
+      <div class="metric-card">
+        <div class="metric-label">Total Requests</div>
+        <div class="metric-value metric-blue" id="m-total">0</div>
+        <div class="metric-sub" id="m-rps">0 req/s</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Allowed</div>
+        <div class="metric-value metric-green" id="m-allow">0</div>
+        <div class="metric-sub" id="m-allow-pct">—</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Denied</div>
+        <div class="metric-value metric-red" id="m-deny">0</div>
+        <div class="metric-sub" id="m-deny-pct">—</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">AI Anomalies</div>
+        <div class="metric-value metric-amber" id="m-anomaly">0</div>
+        <div class="metric-sub" id="m-model">IsoForest active</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Avg Risk Score</div>
+        <div class="metric-value metric-purple" id="m-risk">0.00</div>
+        <div class="metric-sub" id="m-risk-p95">p95: 0.00</div>
+      </div>
+    </div>
+
+    <!-- 4-pane content -->
+    <div class="content-grid">
+      <!-- Access Log -->
+      <div class="pane">
+        <div class="pane-header">
+          <div class="pane-title">ACCESS LOG</div>
+          <div class="pane-count count-green" id="cnt-allow">0 ALLOW</div>
+          <div class="pane-count count-red" id="cnt-deny">0 DENY</div>
+        </div>
+        <div id="log-feed"></div>
+      </div>
+
+      <!-- AI Anomaly Feed -->
+      <div class="pane">
+        <div class="pane-header">
+          <div class="pane-title">AI ENGINE — ANOMALY FEED</div>
+          <div class="pane-count count-amber" id="cnt-anomaly">0 FLAGGED</div>
+        </div>
+        <div id="anomaly-feed">
+          <div style="color:var(--muted);font-family:var(--mono);font-size:11px;padding:12px 0;">
+            Isolation Forest model active. Monitoring behavioral baselines...
+          </div>
+        </div>
+      </div>
+
+      <!-- Traffic Sparkline -->
+      <div class="pane">
+        <div class="pane-header">
+          <div class="pane-title">TRAFFIC — ALLOW vs DENY (30s window)</div>
+        </div>
+        <canvas id="traffic-chart"></canvas>
+      </div>
+
+      <!-- Policy Engine Decisions -->
+      <div class="pane">
+        <div class="pane-header">
+          <div class="pane-title">OPA POLICY DECISIONS</div>
+          <div class="pane-count count-blue" id="cnt-policy">LIVE</div>
+        </div>
+        <div id="policy-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Simulation bar -->
+<div class="sim-bar">
+  <span class="sim-label">SIMULATE:</span>
+  <button class="sim-btn" onclick="sim('normal')">Normal Traffic</button>
+  <button class="sim-btn" onclick="sim('burst')">Concurrent Burst</button>
+  <button class="sim-btn warn" onclick="sim('unauth')">Unauth Attempts</button>
+  <button class="sim-btn danger" onclick="sim('attack')">DDoS / Attack</button>
+  <button class="sim-btn warn" onclick="sim('reauth')">Force Re-auth</button>
+  <button class="sim-btn" onclick="sim('ailearn')">AI Learning Cycle</button>
+  <span style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted)" id="sim-status">Ready</span>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+// ── State ──────────────────────────────────────────────────────────────────────
+const state = {
+  total: 0, allow: 0, deny: 0, anomalies: 0,
+  risks: [], rpsWindow: [],
+  roleCounts: { student: 0, professor: 0, visitor: 0, unknown: 0 },
+  trafficHistory: { allow: new Array(30).fill(0), deny: new Array(30).fill(0) },
+  policyDecisions: [],
+  logEntries: 0,
+};
+
+const RBAC = {
+  student:   { student: true,  professor: false, visitor: true,  admin: false },
+  professor: { student: true,  professor: true,  visitor: true,  admin: false },
+  visitor:   { student: false, professor: false, visitor: true,  admin: false },
+  unknown:   { student: false, professor: false, visitor: false, admin: false },
+};
+
+const ROLES = ['student','professor','visitor'];
+const SVCS  = ['student','professor','visitor','admin'];
+const METHODS = ['GET','GET','GET','POST','PUT'];
+
+// ── Clock ──────────────────────────────────────────────────────────────────────
+setInterval(() => {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('en-GB', { hour12: false, timeZone: 'UTC' }) + ' UTC';
+}, 1000);
+
+// Countdown cert timer
+let certSecs = 85262;
+setInterval(() => {
+  certSecs--;
+  if (certSecs < 0) certSecs = 86400;
+  const h = String(Math.floor(certSecs/3600)).padStart(2,'0');
+  const m = String(Math.floor((certSecs%3600)/60)).padStart(2,'0');
+  const s = String(certSecs%60).padStart(2,'0');
+  document.getElementById('cert-timer').textContent = `next rotation: ${h}:${m}:${s}`;
+}, 1000);
+
+// ── Chart ──────────────────────────────────────────────────────────────────────
+const ctx = document.getElementById('traffic-chart').getContext('2d');
+const trafficChart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: new Array(30).fill(''),
+    datasets: [
+      {
+        label: 'Allow',
+        data: state.trafficHistory.allow,
+        borderColor: '#22d3a5',
+        backgroundColor: 'rgba(34,211,165,0.08)',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.4,
+      },
+      {
+        label: 'Deny',
+        data: state.trafficHistory.deny,
+        borderColor: '#f87171',
+        backgroundColor: 'rgba(248,113,113,0.06)',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.4,
+      },
+    ],
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: { duration: 300 },
+    scales: {
+      x: { display: false },
+      y: {
+        beginAtZero: true,
+        grid: { color: 'rgba(255,255,255,0.04)' },
+        ticks: { color: '#6b7280', font: { family: 'IBM Plex Mono', size: 10 }, maxTicksLimit: 4 },
+      },
+    },
+    plugins: {
+      legend: {
+        labels: { color: '#6b7280', font: { family: 'IBM Plex Mono', size: 10 }, boxWidth: 12 }
+      },
+    },
+  },
+});
+
+// ── Log helpers ────────────────────────────────────────────────────────────────
+function ts() {
+  return new Date().toLocaleTimeString('en-GB', { hour12: false, timeZone: 'UTC' });
+}
+
+function addLog(type, role, message) {
+  const feed = document.getElementById('log-feed');
+  const div = document.createElement('div');
+  div.className = `log-line log-${type}`;
+  const roleColors = { student: '#22d3a5', professor: '#a78bfa', visitor: '#fbbf24', unknown: '#f87171', system: '#60a5fa' };
+  const tagMap = { allow: '<span class="tag-allow">ALLOW</span>', deny: '<span class="tag-deny">DENY</span>', warn: '<span class="tag-warn">WARN</span>', info: '' };
+  div.innerHTML = `
+    <span class="log-ts">${ts()}</span>
+    <span class="log-role" style="color:${roleColors[role]||'#9ca3af'}">${(role||'system').padStart(9)}</span>
+    <span class="log-body">${tagMap[type]||''} ${message}</span>
+  `;
+  feed.prepend(div);
+  while (feed.children.length > 80) feed.removeChild(feed.lastChild);
+  state.logEntries++;
+}
+
+function addAnomaly(user, role, score, flags) {
+  const feed = document.getElementById('anomaly-feed');
+  const riskClass = score > 0.8 ? 'risk-high' : score > 0.5 ? 'risk-med' : 'risk-low';
+  const div = document.createElement('div');
+  div.className = 'anomaly-card';
+  div.innerHTML = `
+    <div class="anomaly-header">
+      <span class="anomaly-user">${user} <span style="color:var(--muted);font-weight:400;font-size:11px">(${role})</span></span>
+      <span class="risk-badge ${riskClass}">risk ${score.toFixed(3)}</span>
+    </div>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--muted)">${ts()}</div>
+    <div class="anomaly-flags">${flags.map(f=>`<span class="flag">${f}</span>`).join('')}</div>
+  `;
+  feed.prepend(div);
+  while (feed.children.length > 20) feed.removeChild(feed.lastChild);
+  state.anomalies++;
+  document.getElementById('cnt-anomaly').textContent = state.anomalies + ' FLAGGED';
+  document.getElementById('m-anomaly').textContent = state.anomalies;
+}
+
+function addPolicyDecision(role, service, method, allowed, reason) {
+  const list = document.getElementById('policy-list');
+  const div = document.createElement('div');
+  div.className = `policy-row ${allowed ? 'policy-allow' : 'policy-deny'}`;
+  div.innerHTML = `
+    <span class="policy-role" style="color:${allowed?'var(--green)':'var(--red)'}">${role}</span>
+    <span class="policy-svc">→ ${service}_svc</span>
+    <span class="policy-methods">${method}</span>
+    <span class="policy-live-tag" style="background:${allowed?'var(--green-bg)':'var(--red-bg)'};color:${allowed?'var(--green)':'var(--red)'}">${reason}</span>
+    <span class="log-ts" style="font-family:var(--mono);font-size:10px;color:var(--muted)">${ts()}</span>
+  `;
+  list.prepend(div);
+  while (list.children.length > 30) list.removeChild(list.lastChild);
+}
+
+// ── Core request simulation ────────────────────────────────────────────────────
+function simulateRequest(role, service, forceMethod) {
+  const method = forceMethod || METHODS[Math.floor(Math.random() * METHODS.length)];
+  const allowed = RBAC[role]?.[service] ?? false;
+  const reqId = 'REQ-' + Math.random().toString(36).slice(2,7).toUpperCase();
+  const latency = allowed ? (Math.random()*45+5).toFixed(0) : (Math.random()*8+2).toFixed(0);
+  const risk = allowed ? (Math.random()*0.15) : (Math.random()*0.5+0.2);
+
+  state.total++;
+  state.rpsWindow.push(Date.now());
+  state.roleCounts[role] = (state.roleCounts[role] || 0) + 1;
+  state.risks.push(risk);
+  if (state.risks.length > 200) state.risks.shift();
+
+  const tickBucket = state.trafficHistory.allow.length - 1;
+  if (allowed) {
+    state.allow++;
+    state.trafficHistory.allow[tickBucket]++;
+    addLog('allow', role, `${reqId} → ${service}_svc [${method}] ${latency}ms · risk=${risk.toFixed(2)}`);
+  } else {
+    state.deny++;
+    state.trafficHistory.deny[tickBucket]++;
+    addLog('deny', role, `${reqId} → ${service}_svc [${method}] BLOCKED · reason=role_not_permitted`);
+  }
+
+  // OPA decision log
+  const reason = allowed ? 'allow' : 'policy_deny';
+  addPolicyDecision(role, service, method, allowed, reason);
+
+  // High-risk anomaly detection
+  if (risk > 0.6 || !allowed) {
+    const flags = [];
+    if (!allowed) flags.push('unauthorized_svc_access');
+    if (risk > 0.7) flags.push('high_risk_score');
+    if (risk > 0.85) flags.push('isolation_forest_anomaly');
+    if (flags.length > 0) {
+      addAnomaly(`user-${role[0].toUpperCase()}${Math.floor(Math.random()*900+100)}`, role, risk, flags);
+    }
+  }
+
+  updateMetrics();
+}
+
+function updateMetrics() {
+  const now = Date.now();
+  state.rpsWindow = state.rpsWindow.filter(t => now - t < 5000);
+  const rps = (state.rpsWindow.length / 5).toFixed(1);
+
+  document.getElementById('m-total').textContent = state.total.toLocaleString();
+  document.getElementById('m-allow').textContent = state.allow.toLocaleString();
+  document.getElementById('m-deny').textContent  = state.deny.toLocaleString();
+  document.getElementById('m-rps').textContent   = rps + ' req/s';
+
+  if (state.total > 0) {
+    document.getElementById('m-allow-pct').textContent = ((state.allow/state.total)*100).toFixed(1) + '%';
+    document.getElementById('m-deny-pct').textContent  = ((state.deny/state.total)*100).toFixed(1) + '%';
+  }
+
+  const avgRisk = state.risks.length ? (state.risks.reduce((a,b)=>a+b,0)/state.risks.length).toFixed(3) : '0.000';
+  const p95idx  = Math.floor(state.risks.length * 0.95);
+  const p95risk = state.risks.length ? [...state.risks].sort((a,b)=>a-b)[p95idx]?.toFixed(3) ?? '0.000' : '0.000';
+  document.getElementById('m-risk').textContent    = avgRisk;
+  document.getElementById('m-risk-p95').textContent = 'p95: ' + p95risk;
+
+  document.getElementById('cnt-allow').textContent = state.allow + ' ALLOW';
+  document.getElementById('cnt-deny').textContent  = state.deny  + ' DENY';
+
+  // Role traffic bars
+  const maxRole = Math.max(...Object.values(state.roleCounts), 1);
+  for (const role of ['student','professor','visitor','unknown']) {
+    const count = state.roleCounts[role] || 0;
+    document.getElementById(`rc-${role}`).textContent = count + ' reqs';
+    document.getElementById(`rb-${role}`).style.width = ((count/maxRole)*100) + '%';
+  }
+}
+
+// ── Chart ticker — push a new bucket every second ────────────────────────────
+setInterval(() => {
+  state.trafficHistory.allow.shift(); state.trafficHistory.allow.push(0);
+  state.trafficHistory.deny.shift();  state.trafficHistory.deny.push(0);
+  trafficChart.update('none');
+}, 1000);
+
+// ── Alert toast ────────────────────────────────────────────────────────────────
+function showAlert(msg) {
+  const el = document.getElementById('alert-toast');
+  el.textContent = '⚠ ' + msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 5000);
+}
+
+// ── Simulation scenarios ───────────────────────────────────────────────────────
+let simInterval = null;
+
+function clearSim() {
+  if (simInterval) { clearInterval(simInterval); simInterval = null; }
+  document.querySelectorAll('.sim-btn').forEach(b => b.classList.remove('active'));
+}
+
+function setStatus(txt) {
+  document.getElementById('sim-status').textContent = txt;
+}
+
+function sim(scenario) {
+  clearSim();
+
+  if (scenario === 'normal') {
+    setStatus('Normal traffic — mixed roles');
+    let i = 0;
+    simInterval = setInterval(() => {
+      const role = ROLES[Math.floor(Math.random() * ROLES.length)];
+      const svc  = SVCS[Math.floor(Math.random() * SVCS.length)];
+      simulateRequest(role, svc);
+      if (++i > 200) clearSim();
+    }, 250);
+
+  } else if (scenario === 'burst') {
+    setStatus('Concurrent burst — 50 requests');
+    document.querySelector('[onclick="sim(\'burst\')"]').classList.add('active');
+    for (let i = 0; i < 50; i++) {
+      setTimeout(() => {
+        const role = ROLES[Math.floor(Math.random() * ROLES.length)];
+        simulateRequest(role, SVCS[Math.floor(Math.random() * SVCS.length)]);
+      }, Math.random() * 800);
+    }
+    setTimeout(() => setStatus('Burst complete'), 1000);
+
+  } else if (scenario === 'unauth') {
+    setStatus('Unauthorized access patterns');
+    const DENY_PATTERNS = [
+      ['student','professor'], ['student','admin'],
+      ['visitor','student'],   ['visitor','professor'],
+      ['visitor','admin'],     ['professor','admin'],
+    ];
+    let idx = 0;
+    simInterval = setInterval(() => {
+      const [role, svc] = DENY_PATTERNS[idx % DENY_PATTERNS.length];
+      simulateRequest(role, svc, 'GET');
+      idx++;
+      if (idx > 30) clearSim();
+    }, 300);
+
+  } else if (scenario === 'attack') {
+    setStatus('DDoS / Attack simulation');
+    document.querySelector('[onclick="sim(\'attack\')"]').classList.add('active');
+    showAlert('ATTACK DETECTED — DDoS pattern. AI engine rate-limiting. IPs flagged.');
+    let count = 0;
+    simInterval = setInterval(() => {
+      simulateRequest('unknown', SVCS[Math.floor(Math.random() * SVCS.length)], 'GET');
+      simulateRequest('unknown', 'admin', 'POST');
+      if (++count % 10 === 0) {
+        addLog('warn', 'system', `AI ENGINE: ${count*2} malicious requests blocked. Blocklist updated via OPA Data API.`);
+        addAnomaly('bot-' + Math.random().toString(36).slice(2,8), 'unknown', 0.95 + Math.random()*0.05,
+          ['ddos_pattern','ip_blocked','isolation_forest_anomaly','high_request_rate_1m']);
+      }
+      if (count > 40) { clearSim(); showAlert('Attack mitigated. 3 IPs permanently blocked.'); }
+    }, 100);
+
+  } else if (scenario === 'reauth') {
+    setStatus('Forcing re-authentication cycle');
+    addLog('warn', 'system', 'SECURITY: Periodic re-auth triggered for all active sessions. Tokens being rotated...');
+    setTimeout(() => addLog('info', 'system', 'Re-auth complete. 3 new JWT tokens issued. Sessions re-validated.'), 1500);
+    setTimeout(() => setStatus('Re-auth cycle complete'), 2000);
+
+  } else if (scenario === 'ailearn') {
+    setStatus('AI model retraining cycle');
+    addLog('info', 'system', 'AI ENGINE: Fetching 5000 log samples from Elasticsearch...');
+    setTimeout(() => addLog('info', 'system', 'AI ENGINE: Retraining IsolationForest on 4923 samples (contamination=0.05)...'), 1000);
+    setTimeout(() => addLog('info', 'system', 'AI ENGINE: Model retrained in 2.3s. Updated behavioral baselines for 12 users.'), 3000);
+    setTimeout(() => {
+      addLog('info', 'system', 'AI ENGINE: Pushing updated anomaly thresholds to OPA Data API...');
+      addLog('info', 'system', 'AI ENGINE: 2 users flagged as high-risk. Policy tightened automatically.');
+      addAnomaly('user-S042', 'student', 0.82, ['high_request_rate_5m','excessive_service_enumeration']);
+      setStatus('AI learning cycle complete');
+    }, 4500);
+  }
+}
+
+// ── Ambient background traffic ─────────────────────────────────────────────────
+function boot() {
+  addLog('info', 'system', 'API Gateway online · mTLS certificates loaded · JWT validation ready');
+  addLog('info', 'system', 'OPA policy engine connected · Rego policies compiled');
+  addLog('info', 'system', 'AI engine started · IsolationForest model seeded (1440 normal samples)');
+  addLog('info', 'system', 'Elasticsearch connected · Log index: zt-logs-2025.01');
+  addLog('info', 'system', 'Prometheus scraping active · Grafana dashboards loaded');
+  addLog('info', 'system', 'Istio STRICT mTLS enforced · All services registered with SPIFFE IDs');
+  addLog('info', 'system', 'Zero-Trust Ecosystem fully operational');
+
+  // Add initial policy entries
+  addPolicyDecision('student',   'student',   'GET',  true,  'allow');
+  addPolicyDecision('professor', 'professor', 'POST', true,  'allow');
+  addPolicyDecision('visitor',   'visitor',   'GET',  true,  'allow');
+  addPolicyDecision('student',   'admin',     'GET',  false, 'role_not_permitted');
+  addPolicyDecision('visitor',   'professor', 'GET',  false, 'role_not_permitted');
+}
+
+setTimeout(boot, 200);
+setTimeout(() => sim('normal'), 2500);
+</script>
+</body>
+</html>

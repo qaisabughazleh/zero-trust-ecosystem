@@ -1,0 +1,131 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zt-gateway
+  namespace: zero-trust
+  labels:
+    app: zt-gateway
+    component: gateway
+    version: "1.0"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: zt-gateway
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: zt-gateway
+        version: "1.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: zt-gateway-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: gateway
+          image: zero-trust/gateway:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: PORT
+              value: "8080"
+            - name: OPA_URL
+              value: "http://opa-svc:8181"
+            - name: AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: zt-secrets
+                  key: jwt-secret
+            - name: REDIS_URL
+              value: "redis://redis-svc:6379"
+            - name: AI_ENGINE_URL
+              value: "http://ai-engine-svc:5000"
+            - name: STUDENT_SVC_URL
+              value: "http://student-svc:3001"
+            - name: PROFESSOR_SVC_URL
+              value: "http://professor-svc:3002"
+            - name: VISITOR_SVC_URL
+              value: "http://visitor-svc:3003"
+            - name: ADMIN_SVC_URL
+              value: "http://admin-svc:3004"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          # Mount mTLS certificates (issued by cert-manager)
+          volumeMounts:
+            - name: tls-certs
+              mountPath: /certs
+              readOnly: true
+      volumes:
+        - name: tls-certs
+          secret:
+            secretName: zt-gateway-tls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zt-gateway-svc
+  namespace: zero-trust
+spec:
+  selector:
+    app: zt-gateway
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: zt-gateway-hpa
+  namespace: zero-trust
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: zt-gateway
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80

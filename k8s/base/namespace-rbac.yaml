@@ -1,0 +1,133 @@
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: zero-trust
+  labels:
+    name: zero-trust
+    istio-injection: enabled   # Istio sidecar for mTLS
+---
+# Network Policy — Default deny all ingress/egress
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: zero-trust
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Allow gateway → microservices
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gateway-to-services
+  namespace: zero-trust
+spec:
+  podSelector:
+    matchLabels:
+      component: microservice
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              component: gateway
+      ports:
+        - protocol: TCP
+          port: 3001
+        - protocol: TCP
+          port: 3002
+        - protocol: TCP
+          port: 3003
+        - protocol: TCP
+          port: 3004
+---
+# Allow all components → OPA
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-opa-access
+  namespace: zero-trust
+spec:
+  podSelector:
+    matchLabels:
+      app: opa
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: zero-trust
+      ports:
+        - protocol: TCP
+          port: 8181
+---
+# Allow all → AI engine
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ai-engine-access
+  namespace: zero-trust
+spec:
+  podSelector:
+    matchLabels:
+      app: ai-engine
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: zero-trust
+      ports:
+        - protocol: TCP
+          port: 5000
+---
+# Secrets (base64 encoded in production — use external-secrets-operator or Vault)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: zt-secrets
+  namespace: zero-trust
+type: Opaque
+stringData:
+  jwt-secret: "REPLACE-WITH-STRONG-SECRET-IN-PRODUCTION"
+  db-password: "ztpass"
+  redis-password: "redispass"
+---
+# ServiceAccount for gateway
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: zt-gateway-sa
+  namespace: zero-trust
+---
+# ClusterRole for OPA bundle reading
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: zt-opa-reader
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+    resourceNames: ["opa-policies"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: zt-opa-reader-binding
+subjects:
+  - kind: ServiceAccount
+    name: zt-gateway-sa
+    namespace: zero-trust
+roleRef:
+  kind: ClusterRole
+  name: zt-opa-reader
+  apiGroup: rbac.authorization.k8s.io

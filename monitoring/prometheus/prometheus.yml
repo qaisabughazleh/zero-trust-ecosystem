@@ -1,0 +1,56 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'zero-trust-ecosystem'
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+scrape_configs:
+  - job_name: 'gateway'
+    static_configs:
+      - targets: ['gateway:8080']
+    metrics_path: /metrics
+
+  - job_name: 'student-svc'
+    static_configs:
+      - targets: ['student-svc:3001']
+    metrics_path: /metrics
+
+  - job_name: 'professor-svc'
+    static_configs:
+      - targets: ['professor-svc:3002']
+    metrics_path: /metrics
+
+  - job_name: 'visitor-svc'
+    static_configs:
+      - targets: ['visitor-svc:3003']
+    metrics_path: /metrics
+
+  - job_name: 'ai-engine'
+    static_configs:
+      - targets: ['ai-engine:5000']
+    metrics_path: /metrics
+
+  - job_name: 'opa'
+    static_configs:
+      - targets: ['opa:8181']
+    metrics_path: /metrics
+
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
