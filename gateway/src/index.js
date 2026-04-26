@@ -44,7 +44,7 @@ const app = Fastify({
 });
 
 // ── Redis client ──────────────────────────────────────────────────────────────
-const redis = createClient({ url: REDIS_URL, password: "redispass" });
+const redis = createClient({ url: REDIS_URL });
 await redis.connect();
 
 // ── Plugins ───────────────────────────────────────────────────────────────────
