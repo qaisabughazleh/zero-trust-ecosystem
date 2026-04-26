@@ -1,0 +1,93 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Istio Service Mesh — mTLS & Authorization Policies
+# All service-to-service traffic in zero-trust namespace uses STRICT mTLS.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Enforce STRICT mTLS for the entire namespace
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default-mtls
+  namespace: zero-trust
+spec:
+  mtls:
+    mode: STRICT   # Reject any plaintext traffic between services
+---
+# Gateway is the only entry point for external traffic
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: deny-external-to-services
+  namespace: zero-trust
+spec:
+  # Target: all microservices (not the gateway)
+  selector:
+    matchLabels:
+      component: microservice
+  action: DENY
+  rules:
+    - from:
+        - source:
+            # Deny all traffic not originating from the gateway's service account
+            notPrincipals:
+              - "cluster.local/ns/zero-trust/sa/zt-gateway-sa"
+---
+# OPA only accepts traffic from known service accounts
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: opa-access-control
+  namespace: zero-trust
+spec:
+  selector:
+    matchLabels:
+      app: opa
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/zero-trust/sa/zt-gateway-sa"
+              - "cluster.local/ns/zero-trust/sa/zt-student-sa"
+              - "cluster.local/ns/zero-trust/sa/zt-professor-sa"
+              - "cluster.local/ns/zero-trust/sa/zt-visitor-sa"
+              - "cluster.local/ns/zero-trust/sa/zt-ai-engine-sa"
+      to:
+        - operation:
+            ports: ["8181"]
+---
+# AI engine only accepts from gateway and log service
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: ai-engine-access-control
+  namespace: zero-trust
+spec:
+  selector:
+    matchLabels:
+      app: ai-engine
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/zero-trust/sa/zt-gateway-sa"
+              - "cluster.local/ns/zero-trust/sa/zt-log-sa"
+      to:
+        - operation:
+            ports: ["5000"]
+---
+# DestinationRule — mTLS settings for all internal service communication
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: mtls-all-services
+  namespace: zero-trust
+spec:
+  host: "*.zero-trust.svc.cluster.local"
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL    # Use Istio-issued mTLS certificates (rotated automatically)
+      clientCertificate: /etc/certs/cert-chain.pem
+      privateKey: /etc/certs/key.pem
+      caCertificates: /etc/certs/root-cert.pem

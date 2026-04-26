@@ -1,0 +1,252 @@
+version: "3.9"
+
+networks:
+  zt-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  postgres-data:
+  redis-data:
+  elasticsearch-data:
+  prometheus-data:
+  grafana-data:
+
+services:
+  # ─────────────────────────────────────────────
+  # API GATEWAY  (Node.js / Fastify)
+  # ─────────────────────────────────────────────
+  gateway:
+    build: ./gateway
+    container_name: zt-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+      OPA_URL: http://opa:8181
+      AUTH_SECRET: ${JWT_SECRET:-supersecret-change-in-prod}
+      REDIS_URL: redis://redis:6379
+      LOG_SERVICE_URL: http://log-service:9200
+      AI_ENGINE_URL: http://ai-engine:5000
+      STUDENT_SVC_URL: http://student-svc:3001
+      PROFESSOR_SVC_URL: http://professor-svc:3002
+      VISITOR_SVC_URL: http://visitor-svc:3003
+      ADMIN_SVC_URL: http://admin-svc:3004
+    depends_on:
+      - opa
+      - redis
+      - ai-engine
+    networks:
+      zt-network:
+        ipv4_address: 172.28.0.10
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ─────────────────────────────────────────────
+  # MICROSERVICES
+  # ─────────────────────────────────────────────
+  student-svc:
+    build: ./services/student
+    container_name: zt-student-svc
+    environment:
+      PORT: 3001
+      DB_URL: postgresql://ztuser:ztpass@postgres:5432/ztdb
+      OPA_URL: http://opa:8181
+      SERVICE_NAME: student-svc
+    depends_on: [postgres, opa]
+    networks:
+      zt-network:
+        ipv4_address: 172.28.0.11
+    restart: unless-stopped
+
+  professor-svc:
+    build: ./services/professor
+    container_name: zt-professor-svc
+    environment:
+      PORT: 3002
+      DB_URL: postgresql://ztuser:ztpass@postgres:5432/ztdb
+      OPA_URL: http://opa:8181
+      SERVICE_NAME: professor-svc
+    depends_on: [postgres, opa]
+    networks:
+      zt-network:
+        ipv4_address: 172.28.0.12
+    restart: unless-stopped
+
+  visitor-svc:
+    build: ./services/visitor
+    container_name: zt-visitor-svc
+    environment:
+      PORT: 3003
+      DB_URL: postgresql://ztuser:ztpass@postgres:5432/ztdb
+      OPA_URL: http://opa:8181
+      SERVICE_NAME: visitor-svc
+    depends_on: [postgres, opa]
+    networks:
+      zt-network:
+        ipv4_address: 172.28.0.13
+    restart: unless-stopped
+
+  admin-svc:
+    build: ./services/admin
+    container_name: zt-admin-svc
+    environment:
+      PORT: 3004
+      DB_URL: postgresql://ztuser:ztpass@postgres:5432/ztdb
+      OPA_URL: http://opa:8181
+      SERVICE_NAME: admin-svc
+    depends_on: [postgres, opa]
+    networks:
+      zt-network:
+        ipv4_address: 172.28.0.14
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # OPEN POLICY AGENT
+  # ─────────────────────────────────────────────
+  opa:
+    image: openpolicyagent/opa:latest-envoy
+    container_name: zt-opa
+    ports:
+      - "8181:8181"
+    command:
+      - "run"
+      - "--server"
+      - "--log-level=info"
+      - "--log-format=json"
+      - "--set=decision_logs.console=true"
+      - "/policies"
+    volumes:
+      - ./policy-engine/policies:/policies:ro
+    networks:
+      zt-network:
+        ipv4_address: 172.28.0.20
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8181/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ─────────────────────────────────────────────
+  # AI ENGINE  (Python / FastAPI)
+  # ─────────────────────────────────────────────
+  ai-engine:
+    build: ./ai-engine
+    container_name: zt-ai-engine
+    ports:
+      - "5000:5000"
+    environment:
+      REDIS_URL: redis://redis:6379
+      OPA_URL: http://opa:8181
+      ES_URL: http://elasticsearch:9200
+      MODEL_UPDATE_INTERVAL: 300
+    depends_on: [redis, elasticsearch]
+    networks:
+      zt-network:
+        ipv4_address: 172.28.0.30
+    restart: unless-stopped
+    volumes:
+      - ./ai-engine/models:/app/models
+
+  # ─────────────────────────────────────────────
+  # LOG SERVICE  (lightweight Elasticsearch bridge)
+  # ─────────────────────────────────────────────
+  log-service:
+    build: ./logging
+    container_name: zt-log-service
+    environment:
+      PORT: 9200
+      ES_URL: http://elasticsearch:9201
+      REDIS_URL: redis://redis:6379
+      AI_ENGINE_URL: http://ai-engine:5000
+    depends_on: [elasticsearch, redis]
+    networks:
+      zt-network:
+        ipv4_address: 172.28.0.40
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # INFRASTRUCTURE
+  # ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: zt-postgres
+    environment:
+      POSTGRES_USER: ztuser
+      POSTGRES_PASSWORD: ztpass
+      POSTGRES_DB: ztdb
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      zt-network:
+        ipv4_address: 172.28.0.50
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: zt-redis
+    command: redis-server --appendonly yes --requirepass redispass
+    volumes:
+      - redis-data:/data
+    networks:
+      zt-network:
+        ipv4_address: 172.28.0.51
+    restart: unless-stopped
+
+  elasticsearch:
+    image: elasticsearch:8.11.0
+    container_name: zt-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    ports:
+      - "9201:9200"
+    networks:
+      zt-network:
+        ipv4_address: 172.28.0.52
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: zt-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+    networks:
+      zt-network:
+        ipv4_address: 172.28.0.60
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: zt-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on: [prometheus]
+    networks:
+      zt-network:
+        ipv4_address: 172.28.0.61
+    restart: unless-stopped

@@ -1,0 +1,22 @@
+{
+  "zerotrust": {
+    "blocklist": {
+      "ips": [],
+      "cidrs": []
+    },
+    "anomalies": {
+      "users": {}
+    },
+    "config": {
+      "anomaly_threshold": 0.85,
+      "rate_limit_window_seconds": 60,
+      "max_requests_per_window": {
+        "student": 100,
+        "professor": 200,
+        "visitor": 30,
+        "admin": 500
+      },
+      "reauth_interval_minutes": 30
+    }
+  }
+}
