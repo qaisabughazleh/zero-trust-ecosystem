@@ -4,7 +4,7 @@ RUN apk add --no-cache curl
 
 FROM base AS deps
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 
 FROM base AS runtime
 COPY --from=deps /app/node_modules ./node_modules
