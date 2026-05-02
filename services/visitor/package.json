@@ -1,0 +1,11 @@
+{
+  "name": "zt-visitor-svc",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": { "start": "node src/index.js" },
+  "dependencies": {
+    "fastify": "^4.28.1",
+    "postgres": "^3.4.4"
+  }
+}
